@@ -51,7 +51,7 @@ void main(void) {
 	
 	/* Initialize variables */
 	memset(&file,0,sizeof(file));
-	file.speed = 3;
+	file.speed = 2;
 	ti_CloseAll();
 	if (slot = ti_Open(filename,"r")) ti_Read(&file,sizeof(file),1,slot);
 	ti_CloseAll();
@@ -66,6 +66,10 @@ void main(void) {
 			else if (menuopt==1) file.speed = (!file.speed) ? 2 : file.speed-1;
 			else break; 
 		}
+		k = kb_Data[7];
+		if (k&kb_Up && menuopt!=0) menuopt--;
+		if (k&kb_Down && menuopt!=2) menuopt++;
+		if (k) keywait();
 		gfx_FillScreen(0xFF);
 		gfx_SetTextScale(2,2);
 		for(i=0,y=84;i<3;i++,y+=24) {
@@ -79,7 +83,7 @@ void main(void) {
 		gfx_SetTextXY(5,230);
 		gfx_PrintString("High score (");
 		gfx_PrintString(speedlabels[file.speed]);
-		gfx_PrintString(") :");
+		gfx_PrintString(") : ");
 		gfx_PrintUInt(file.score[file.speed],6);
 		gfx_PrintStringXY(VERSION_INFO,290,230);
 		gfx_SwapDraw();
