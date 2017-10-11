@@ -1,0 +1,188 @@
+; Game mode routine.
+; Input:  Speed (0=slow 1=medium 2=fast)
+; Output: Score
+
+.ASSUME ADL=1
+
+SPEED        EQU 0  ;1 byte speed 1-3 (1=FAST, 2=MEDIUM 3=SLOW)
+CURY         EQU 1  ;1 byte height 0-239
+BLOCKS       EQU 2  ;3 byte mask (blocks 16px wide, 20 blocks per line, left aligned)
+FLAGS        EQU 5  ;1 byte flags 
+DISTANCE     EQU 6  ;1 byte distance in lines before blockspace state change
+EMPTYMAXDIST EQU 7  ;1 byte maximum empty distance
+SCORE        EQU 8  ;4 byte score achieved (24.8 fp). Upper byte always stays 0
+SCREENMODE   EQU 12 ;1 byte screen mode preserve
+BALLX        EQU 13 ;2 byte ball X
+BALLY        EQU 15 ;1 byte ball Y
+
+
+F_BLOCKSPACE EQU 0 ;-- 0:empty (distance EMPTYMAXDIST) 1:blockthickness (distance 8)
+F_RESERVED1  EQU 1
+F_RESERVED2  EQU 2
+F_RESERVED3  EQU 3
+F_RESERVED4  EQU 4
+F_RESERVED5  EQU 5
+F_RESERVED6  EQU 6
+F_RESERVED7  EQU 7
+;----------------------
+	SEGMENT BSS
+INTERNAL_DATA:
+	ds 16
+;----------------------
+	SEGMENT DATA
+INITIAL_DATA:
+	db   0   ;height
+	dw24 0   ;blocks
+	db   0   ;flags
+	db   239 ;distance
+	db   120 ;emptymaxdist
+	dl   0   ;score (24.8 fp)
+	db   0   ;screenmode
+	db   0   ;bally
+	dw   152 ;ballx
+;----------------------
+	SEGMENT CODE
+	XDEF _startGame
+_startGame:
+	POP DE  ;RETURN ADDRESS
+	POP HL  ;FUNCTION INPUT ARGUMENT (SPEED)
+	PUSH DE ;PUT RETURN ADDRESS BACK FOR LATER RET
+	PUSH IX
+		;-- CLEAN INITIALIZE VARIABLE SPACE
+		LD IX,INTERNAL_DATA
+		LD (IX+SPEED),L
+		LEA DE,IX+1
+		LD HL,INITIAL_DATA
+		LD BC,14
+		LDIR
+		;-- PRESERVE PRIOR SCREEN MODE
+		LD HL,0E30000h
+		LD A,(HL)
+		LD (IX+SCREENMODE),A
+		;-- THEN SET NEW SCREEN MODE
+		AND 11110001b  ;blank out bits to set 1bpp mode
+		LD (HL),A
+		PUSH HL
+			;-- RESET SCREEN BUFFER POINTER
+			LD HL,04D0000h
+			PUSH HL
+				PUSH HL
+					CALL SET_SCREEN_POINTER
+				POP DE
+			POP HL
+			;-- CLEAR ALL SCREEN BUFFERS
+			INC DE
+			LD (HL),00h
+			LD BC,#(((320/8)*240)*2)  ;IMMEDIATE VALUE
+			LDIR
+			;-- START THE GAME
+			CALL GAME_MODE
+		POP HL
+		;-- RESTORE PRIOR SCREEN MODE
+		LD A,(IX+SCREENMODE)
+		LD (HL),A
+		LD HL,(IX+SCORE+1)
+	POP IX
+	RET
+	
+GAME_MODE:
+	;IMPLEMENTING THROTTLE
+	LD B,(IX+SPEED)
+GAME_MODE_THROTTLE:
+	LD HL,0E30028h
+	SET 3,(HL)
+	LD L,0020h
+GAME_MODE_THROTTLE_WAITLOOP:
+	BIT 3,(HL)
+	JR Z,GAME_MODE_THROTTLE_WAITLOOP
+	DJNZ GAME_MODE_THROTTLE
+	;ERASE BALL'S PREVIOUS LOCATION
+	;-
+	;DETECT BALL'S NEXT LOCATION. QUIT IF BALL GOES ABOVE PLAY AREA
+	;-
+	;RENDER BALL'S NEW LOCATION
+	;-
+	;UPDATE SCORE BASED ON HEIGHT AND DISTANCE
+	;-
+	;DETECT USER QUIT
+	;-
+	;DRAW NEXT LINE DOWN. JUST BEYOND THE SCREEN'S REACH
+	LD DE,#0D40000h + ((320/8)*240)
+	LD H,40
+	LD A,(IX+CURY)
+	LD L,A
+	PUSH AF
+		MLT HL
+		ADD HL,DE
+		PUSH HL
+			CALL DRAW_LINE_SEGMENT
+			EX (SP),HL
+			LD DE,#-((320/8)*(240-1))+0  ;AUTOINC TO NEXT ROW
+			ADD HL,DE
+			PUSH HL
+				CALL SET_SCREEN_POINTER
+			POP HL
+			DEC HL
+		POP DE
+		;COPY LINE WRITTEN BELOW TO ABOVE
+		EX DE,HL
+		LD BC,39
+		LDIR
+	POP AF
+	INC A
+	CP 240
+	JR NZ,GM_SKIP_CURY_RESET
+	XOR A
+GM_SKIP_CURY_RESET:
+	LD (IX+CURY),A
+	JP GAME_MODE
+	
+;do the LDDR thing after using this routine on appropriate memory areas
+;in:  L= row 0-239 to draw
+;out: line rendered according to data and flags
+;dest: DE,AF,BC
+DRAW_LINE:
+	LD DE,0D40000h
+	LD H,40   ;LINE WIDTH IN 1BPP MODE
+	MLT HL
+DRAW_LINE_SEGMENT:
+	BIT F_BLOCKSPACE,(IY+FLAGS)
+	JR NZ,DRAW_LINE_BARRIERS
+DRAW_LINE_EMPTY:
+	LD BC,39
+	PUSH HL
+	POP DE
+	INC DE
+	LD (HL),00h
+	LDIR
+	RET
+DRAW_LINE_BARRIERS:
+	LD BC,#(20*256)+0
+	LD DE,(IX+BLOCKS)
+	EX DE,HL
+DRAW_LINE_BARRIERS_LOOP:
+	XOR A
+	ADD HL,HL
+	SBC A,B
+	LD (DE),A
+	INC DE
+	LD (DE),A
+	INC DE
+	DJNZ DRAW_LINE_BARRIERS_LOOP
+	EX DE,HL
+	DEC HL
+	RET
+
+	
+;in: HL = ptr to set (reminder: this is in 1bpp mode). destroys HL.
+SET_SCREEN_POINTER:
+	LD (0E00010h),HL
+	LD HL,0E30028h
+	SET 2,(HL)
+	LD L,0020h
+SET_SCREEN_POINTER_LOOP:
+	BIT 2,(HL)
+	JR Z,SET_SCREEN_POINTER_LOOP
+	RET
+	
+
