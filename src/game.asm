@@ -1,8 +1,12 @@
 ; Game mode routine.
-; Input:  Speed (0=slow 1=medium 2=fast)
+; Input:  Speed (2=slow 1=medium 0=fast)
 ; Output: Score
 
 .ASSUME ADL=1
+
+KG1	EQU 0F50012h
+KG7 EQU 0F5001Eh
+MAXRAMP EQU 10
 
 SPEED        EQU 0  ;1 byte speed 1-3 (1=FAST, 2=MEDIUM 3=SLOW)
 CURY         EQU 1  ;1 byte height 0-239
@@ -12,8 +16,11 @@ DISTANCE     EQU 6  ;1 byte distance in lines before blockspace state change
 EMPTYMAXDIST EQU 7  ;1 byte maximum empty distance
 SCORE        EQU 8  ;4 byte score achieved (24.8 fp). Upper byte always stays 0
 SCREENMODE   EQU 12 ;1 byte screen mode preserve
-BALLX        EQU 13 ;2 byte ball X
-BALLY        EQU 15 ;1 byte ball Y
+BALLX        EQU 13 ;1 byte ball X, resolution 0:159 (half-res)
+BALLY        EQU 14 ;1 byte ball Y
+CURRAMP      EQU 15 ;1 byte number of state switches before decreasing EMPTYMAXDIST
+TEMP         EQU 16 ;1 byte temporary looping variable
+
 
 
 F_BLOCKSPACE EQU 0 ;-- 0:empty (distance EMPTYMAXDIST) 1:blockthickness (distance 8)
@@ -27,22 +34,24 @@ F_RESERVED7  EQU 7
 ;----------------------
 	SEGMENT BSS
 INTERNAL_DATA:
-	ds 16
+	ds 30
 ;----------------------
 	SEGMENT DATA
 INITIAL_DATA:
-	db   0   ;height
-	dw24 0   ;blocks
-	db   0   ;flags
-	db   239 ;distance
-	db   120 ;emptymaxdist
-	dl   0   ;score (24.8 fp)
-	db   0   ;screenmode
-	db   0   ;bally
-	dw   152 ;ballx
+	db   0       ;height
+	dw24 0       ;blocks
+	db   0       ;flags
+	db   239     ;distance
+	db   120     ;emptymaxdist
+	dl   0       ;score (24.8 fp)
+	db   0       ;screenmode
+	db   0       ;bally
+	db   76      ;ballx
+	db   MAXRAMP ;curramp
 ;----------------------
 	SEGMENT CODE
 	XDEF _startGame
+	XREF _kb_Scan
 _startGame:
 	POP DE  ;RETURN ADDRESS
 	POP HL  ;FUNCTION INPUT ARGUMENT (SPEED)
@@ -53,7 +62,7 @@ _startGame:
 		LD (IX+SPEED),L
 		LEA DE,IX+1
 		LD HL,INITIAL_DATA
-		LD BC,14
+		LD BC,15
 		LDIR
 		;-- PRESERVE PRIOR SCREEN MODE
 		LD HL,0E30000h
@@ -86,8 +95,10 @@ _startGame:
 	RET
 	
 GAME_MODE:
+	CALL _kb_Scan
 	;IMPLEMENTING THROTTLE
 	LD B,(IX+SPEED)
+	INC B
 GAME_MODE_THROTTLE:
 	LD HL,0E30028h
 	SET 3,(HL)
@@ -98,15 +109,40 @@ GAME_MODE_THROTTLE_WAITLOOP:
 	DJNZ GAME_MODE_THROTTLE
 	;ERASE BALL'S PREVIOUS LOCATION
 	;-
+	
 	;DETECT BALL'S NEXT LOCATION. QUIT IF BALL GOES ABOVE PLAY AREA
 	;-
+	;DETECT USER QUIT
+	LD A,(0F50012h)  ;KEYGROUP 1
+	BIT 6,A          ;MODE
+	RET NZ
 	;RENDER BALL'S NEW LOCATION
 	;-
 	;UPDATE SCORE BASED ON HEIGHT AND DISTANCE
 	;-
-	;DETECT USER QUIT
-	;-
 	;DRAW NEXT LINE DOWN. JUST BEYOND THE SCREEN'S REACH
+	DEC (IX+DISTANCE)
+	JR NZ,GAME_MODE_NO_LINE_MODE_CHANGE
+	LEA HL,IX+FLAGS
+	BIT F_BLOCKSPACE,(HL)
+	JR Z,GAME_MODE_CHANGE_TO_LINES
+	RES F_BLOCKSPACE,(HL)
+	LD A,(IX+EMPTYMAXDIST)
+	LD (IX+DISTANCE),A
+	DEC (IX+CURRAMP)
+	JR NZ,GAME_MODE_NO_DIFFICULTY_RAMPING
+	LD (IX+CURRAMP),MAXRAMP
+	DEC (IX+EMPTYMAXDIST)
+GAME_MODE_NO_DIFFICULTY_RAMPING:
+	JR GAME_MODE_NO_LINE_MODE_CHANGE
+GAME_MODE_CHANGE_TO_LINES:
+	SET F_BLOCKSPACE,(HL)
+	;GENERATE LINES (and not just make a big dark line across the screen like we're doing now for debugging purposes)
+	LD HL,0FFFFFFh
+	LD (IX+BLOCKS),HL
+	;-----
+	LD (IX+DISTANCE),4
+GAME_MODE_NO_LINE_MODE_CHANGE:
 	LD DE,#0D40000h + ((320/8)*240)
 	LD H,40
 	LD A,(IX+CURY)
@@ -185,4 +221,65 @@ SET_SCREEN_POINTER_LOOP:
 	JR Z,SET_SCREEN_POINTER_LOOP
 	RET
 	
+DRAW_SPRITE:	
+	LD L,(IX+CURY)
+	LD E,(IX+BALLY)
+	LD H,40
+	LD D,H
+	MLT HL
+	MLT DE
+	ADD HL,DE
+	LD DE,0D40000h
+	LD A,(IX+BALLX+0)
+	LD C,A
+	AND A,11111100b
+	
+	
+	
+	AND A,00000111b
+	XOR A,00000111b
+	INC A     ;Oin->8out, 7in->1out
+	LD C,A    ;C = MASK LOOP VARIABLE
+DRAW_SPRITE_LOOP:
+	LD DE,SPRITE_DATA
+	LD (IX+TEMP),16
+	
+	
+	
+	
+	PUSH BC
+		PUSH HL
+			
+	
+	
+	LD A,(DE)
+	XOR (HL)
+	LD (HL),A
+	INC HL
+	INC DE
+	
+	
+	
+	
+
+
+	
+SPRITE_MASK
+SPRITE_DATA:
+db 00000111b, 11100000b
+db 00011111b, 11111000b
+db 00111111b, 11111100b
+db 01111111b, 11111110b
+db 01111111b, 11111110b
+db 11111111b, 11111111b
+db 11111111b, 11111111b
+db 11111111b, 11111111b
+db 11111111b, 11111111b
+db 11111111b, 11111111b
+db 11111111b, 11111111b
+db 01111111b, 11111110b
+db 01111111b, 11111110b
+db 00111111b, 11111100b
+db 00011111b, 11111000b
+db 00000111b, 11100000b
 
