@@ -7,6 +7,7 @@
 KG1	EQU 0F50012h
 KG7 EQU 0F5001Eh
 MAXRAMP EQU 10
+LCD_RAM_START EQU 0D40000h
 
 SPEED        EQU 0  ;1 byte speed 1-3 (1=FAST, 2=MEDIUM 3=SLOW)
 CURY         EQU 1  ;1 byte height 0-239
@@ -15,11 +16,10 @@ FLAGS        EQU 5  ;1 byte flags
 DISTANCE     EQU 6  ;1 byte distance in lines before blockspace state change
 EMPTYMAXDIST EQU 7  ;1 byte maximum empty distance
 SCORE        EQU 8  ;4 byte score achieved (24.8 fp). Upper byte always stays 0
-SCREENMODE   EQU 12 ;1 byte screen mode preserve
-BALLX        EQU 13 ;1 byte ball X, resolution 0:159 (half-res)
-BALLY        EQU 14 ;1 byte ball Y
-CURRAMP      EQU 15 ;1 byte number of state switches before decreasing EMPTYMAXDIST
-TEMP         EQU 16 ;1 byte temporary looping variable
+BALLX        EQU 12 ;1 byte ball X, resolution 0:159 (half-res)
+BALLY        EQU 13 ;1 byte ball Y
+CURRAMP      EQU 14 ;1 byte number of state switches before decreasing EMPTYMAXDIST
+TEMP         EQU 15 ;1 byte temporary looping variable
 
 
 
@@ -44,7 +44,6 @@ INITIAL_DATA:
 	db   239     ;distance
 	db   120     ;emptymaxdist
 	dl   0       ;score (24.8 fp)
-	db   0       ;screenmode
 	db   0       ;bally
 	db   76      ;ballx
 	db   MAXRAMP ;curramp
@@ -53,46 +52,41 @@ INITIAL_DATA:
 	XDEF _startGame
 	XREF _kb_Scan
 _startGame:
-	POP DE  ;RETURN ADDRESS
-	POP HL  ;FUNCTION INPUT ARGUMENT (SPEED)
-	PUSH DE ;PUT RETURN ADDRESS BACK FOR LATER RET
+	POP DE		;RETURN ADDRESS
+	EX (SP),HL	;FETCH FUNCTION ARGUMENT WITHOUT CHANGING STACK LEVELS
+	PUSH DE		;RESTORE RETURN ADDRESS
 	PUSH IX
 		;-- CLEAN INITIALIZE VARIABLE SPACE
 		LD IX,INTERNAL_DATA
 		LD (IX+SPEED),L
-		LEA DE,IX+1
+		LEA DE,IX+1  ;TO SKIP PAST SPEED
 		LD HL,INITIAL_DATA
-		LD BC,15
+		LD BC,14
 		LDIR
-		;-- PRESERVE PRIOR SCREEN MODE
+		;-- SET 1BPP SCREEN MODE
 		LD HL,0E30000h
 		LD A,(HL)
-		LD (IX+SCREENMODE),A
-		;-- THEN SET NEW SCREEN MODE
 		AND 11110001b  ;blank out bits to set 1bpp mode
 		LD (HL),A
-		PUSH HL
-			;-- RESET SCREEN BUFFER POINTER
-			LD HL,04D0000h
-			PUSH HL
-				PUSH HL
-					CALL SET_SCREEN_POINTER
-				POP DE
-			POP HL
-			;-- CLEAR ALL SCREEN BUFFERS
-			INC DE
-			LD (HL),00h
-			LD BC,#(((320/8)*240)*2)  ;IMMEDIATE VALUE
-			LDIR
-			;-- START THE GAME
-			CALL GAME_MODE
-		POP HL
-		;-- RESTORE PRIOR SCREEN MODE
-		LD A,(IX+SCREENMODE)
-		LD (HL),A
-		LD HL,(IX+SCORE+1)
+		;-- SET BLACK & WHITE PALETTE
+		LD H,02h       ;HL SET TO 0E30000h, NEED 0E30200h
+		DEC BC         ;BC NOW -1 (WHITE)
+		LD (HL),BC
+		INC HL
+		INC HL
+		INC BC         ;BC NOW 0 (BLACK)
+		LD (HL),BC
+		;-- RESET SCREEN BUFFER POINTER
+		LD HL,LCD_RAM_START
+		CALL SET_SCREEN_POINTER
+		;-- START THE GAME
+		;CALL GAME_MODE
+		LD HL,(IX+SCORE)
 	POP IX
 	RET
+	
+
+
 	
 GAME_MODE:
 	CALL _kb_Scan
@@ -143,7 +137,7 @@ GAME_MODE_CHANGE_TO_LINES:
 	;-----
 	LD (IX+DISTANCE),4
 GAME_MODE_NO_LINE_MODE_CHANGE:
-	LD DE,#0D40000h + ((320/8)*240)
+	LD DE,LCD_RAM_START + ((320/8)*240)
 	LD H,40
 	LD A,(IX+CURY)
 	LD L,A
@@ -178,7 +172,7 @@ GM_SKIP_CURY_RESET:
 ;out: line rendered according to data and flags
 ;dest: DE,AF,BC
 DRAW_LINE:
-	LD DE,0D40000h
+	LD DE,LCD_RAM_START
 	LD H,40   ;LINE WIDTH IN 1BPP MODE
 	MLT HL
 DRAW_LINE_SEGMENT:
@@ -229,7 +223,7 @@ DRAW_SPRITE:
 	MLT HL
 	MLT DE
 	ADD HL,DE
-	LD DE,0D40000h
+	LD DE,LCD_RAM_START
 	LD A,(IX+BALLX+0)
 	LD C,A
 	AND A,11111100b

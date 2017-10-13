@@ -45,6 +45,7 @@ void main(void) {
 	uint8_t i,y,menuopt;
 	kb_key_t k;
 	ti_var_t slot;
+	int unsigned curscore;
 	
 	/* Initialize system */
 	initgfx();
@@ -62,7 +63,7 @@ void main(void) {
 		if (k) keywait();
 		if (k&kb_Mode) break;
 		if (k&kb_2nd) {
-			if (menuopt==0) { startGame(file.speed); gfx_Begin(); keywait(); }
+			if (menuopt==0) { curscore = startGame(file.speed); initgfx(); keywait(); }
 			else if (menuopt==1) file.speed = (!file.speed) ? 2 : file.speed-1;
 			else break; 
 		}
