@@ -63,7 +63,7 @@ void main(void) {
 		if (k) keywait();
 		if (k&kb_Mode) break;
 		if (k&kb_2nd) {
-			if (menuopt==0) { curscore = startGame(file.speed); initgfx(); keywait(); }
+			if (menuopt==0) { gfx_FillScreen(0); gfx_SwapDraw(); gfx_FillScreen(0); curscore = startGame(file.speed); initgfx(); keywait(); }
 			else if (menuopt==1) file.speed = (!file.speed) ? 2 : file.speed-1;
 			else break; 
 		}
