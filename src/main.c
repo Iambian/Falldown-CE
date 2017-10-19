@@ -1,9 +1,9 @@
 /*
  *--------------------------------------
- * Program Name:
- * Author:
- * License:
- * Description:
+ * Program Name: Falldown
+ * Author: Rodger 'Iambian' Weisman
+ * License: MIT
+ * Description: Fall through the gaps and don't hit the top of the screen.
  *--------------------------------------
 */
 
@@ -27,53 +27,80 @@
 #include <keypadc.h>
 #include <graphx.h>
 #include <fileioc.h>
+#include <decompress.h>
+
+#include "gfx/sprites_gfx.h"
 
 /* Put your function prototypes here */
 extern int startGame(uint8_t speed);
 void keywait();
 void keywaitrelease();
 void centerstr(char* s,uint8_t y);
-void initgfx();
 
 /* Put all your globals here */
-struct { int score[3]; uint8_t speed; } file;
+struct { uint8_t ver; int score[4]; uint8_t speed; } file;
 char* filename = "FALLDDAT";
-char* titlemenu[] = {"Start Game","Change Speed","Quit Game"};
-char* speedlabels[] = {"Fast","Medium","Slow"};
+char* titlemenu[] = {"Start Game","Change Speed","About","Quit Game"};
+char* speedlabels[] = {"Slow","Medium","Fast","Hyper"};
+#define CREDITS_LEN 7
+char* credits[] = {
+	"Falldown CE",
+	"Push LEFT/RIGHT to move the ball",
+	"and make it fall through the gaps.",
+	"Don't let the ball touch the top",
+	"",
+	"Program by Rodger 'Iambian' Weisman",
+	"Released under the MIT License",
+};
 
 void main(void) {
 	uint8_t i,y,menuopt;
 	kb_key_t k;
 	ti_var_t slot;
 	int unsigned curscore;
+	int *temp_ptr;
 	
 	/* Initialize system */
-	initgfx();
+	gfx_Begin(gfx_8bpp);
+	gfx_SetDrawBuffer();
 	
 	/* Initialize variables */
 	memset(&file,0,sizeof(file));
-	file.speed = 2;
 	ti_CloseAll();
 	if (slot = ti_Open(filename,"r")) ti_Read(&file,sizeof(file),1,slot);
 	ti_CloseAll();
 	menuopt = 0;
 	while (1) {
 		kb_Scan();
+		
 		k = kb_Data[1];
-		if (k) keywait();
-		if (k&kb_Mode) break;
 		if (k&kb_2nd) {
-			if (menuopt==0) { gfx_FillScreen(0); gfx_SwapDraw(); gfx_FillScreen(0); curscore = startGame(file.speed); initgfx(); keywait(); }
-			else if (menuopt==1) file.speed = (!file.speed) ? 2 : file.speed-1;
-			else break; 
-		}
+			if (menuopt==0) { 
+				curscore = startGame(file.speed);
+				temp_ptr = &file.score[file.speed];
+				if (curscore > *temp_ptr) *temp_ptr = curscore;
+			}
+			else if (menuopt==1) file.speed &= 3;
+			else if (menuopt==2) {
+				gfx_FillScreen(0xFF);
+				for (i=0,y=5;i<CREDITS_LEN;i++,y+=16) centerstr(credits[i],y);
+				gfx_SwapDraw();
+				keywaitrelease();
+			}
+			else break;
+			keywait();
+		} else if (k&kb_Mode) break;
+		
 		k = kb_Data[7];
-		if (k&kb_Up && menuopt!=0) menuopt--;
-		if (k&kb_Down && menuopt!=2) menuopt++;
-		if (k) keywait();
+		if (k&kb_Up) menuopt--;
+		if (k&kb_Down) menuopt++;
+		if (k) {
+			menuopt &= 3;
+			keywait();
+		}
 		gfx_FillScreen(0xFF);
 		gfx_SetTextScale(2,2);
-		for(i=0,y=84;i<3;i++,y+=24) {
+		for(i=0,y=80;i<4;i++,y+=24) {
 			if (menuopt==i) gfx_SetTextFGColor(MENU_SELECTED_COLOR);
 			centerstr(titlemenu[i],y);
 			gfx_SetTextFGColor(MENU_NORMAL_COLOR);
@@ -92,6 +119,7 @@ void main(void) {
 	gfx_End();
 	if (slot = ti_Open(filename,"w")) ti_Write(&file,sizeof(file),1,slot);
 	ti_CloseAll();
+	keywait();
 }
 
 /* Put other functions here */
@@ -105,9 +133,14 @@ void centerstr(char* s,uint8_t y) {
 	gfx_PrintStringXY(s,(LCD_WIDTH-gfx_GetStringWidth(s))>>1,y);
 }
 
-void initgfx() {
-	gfx_Begin(gfx_8bpp);
-	gfx_SetDrawBuffer();
-}
 
+/*  NOTE: Use the following variable/labels to access sprite data:
+			ball
+			block
+	These names have been defined for us in sprites_gfx.h and is of
+	the type gfx_sprite_t.
+*/
+void gamemode() {
+	
+}
 
