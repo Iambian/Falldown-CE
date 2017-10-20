@@ -10,6 +10,18 @@
 #define VERSION_INFO "v0.1"
 #define MENU_SELECTED_COLOR 0x4F
 #define MENU_NORMAL_COLOR 0x00
+#define TRANSPARENT_COLOR 0xF8
+#define GREETINGS_DIALOG_TEXT_COLOR 0xDF
+
+
+#define GAPS_TO_MAKE 4
+#define GAP_COLLAPSE_INTERVAL 1
+
+#define GMBOX_X (LCD_WIDTH/4)
+#define GMBOX_Y (LCD_HEIGHT/2-LCD_HEIGHT/16)
+#define GMBOX_W (LCD_WIDTH/2)
+#define GMBOX_H (LCD_HEIGHT/8)
+
 
 /* Keep these headers */
 #include <stdbool.h>
@@ -32,19 +44,25 @@
 #include "gfx/sprites_gfx.h"
 
 /* Put your function prototypes here */
-extern int startGame(uint8_t speed);
+extern void clearRectFast(uint8_t ypos);
+
+int gamemode();
 void keywait();
 void keywaitrelease();
 void centerstr(char* s,uint8_t y);
+void drawtitle();
+void drawblocks(uint8_t ypos);
+void vsync();
 
 /* Put all your globals here */
+gfx_UninitedSprite(balltemp,ball_width,ball_height);
 struct { uint8_t ver; int score[4]; uint8_t speed; } file;
 char* filename = "FALLDDAT";
+char *title = "Falldown CE";
 char* titlemenu[] = {"Start Game","Change Speed","About","Quit Game"};
 char* speedlabels[] = {"Slow","Medium","Fast","Hyper"};
-#define CREDITS_LEN 7
+#define CREDITS_LEN 6
 char* credits[] = {
-	"Falldown CE",
 	"Push LEFT/RIGHT to move the ball",
 	"and make it fall through the gaps.",
 	"Don't let the ball touch the top",
@@ -63,7 +81,8 @@ void main(void) {
 	/* Initialize system */
 	gfx_Begin(gfx_8bpp);
 	gfx_SetDrawBuffer();
-	
+	gfx_SetTransparentColor(TRANSPARENT_COLOR);
+
 	/* Initialize variables */
 	memset(&file,0,sizeof(file));
 	ti_CloseAll();
@@ -76,14 +95,14 @@ void main(void) {
 		k = kb_Data[1];
 		if (k&kb_2nd) {
 			if (menuopt==0) { 
-				curscore = startGame(file.speed);
+				curscore = gamemode();
 				temp_ptr = &file.score[file.speed];
 				if (curscore > *temp_ptr) *temp_ptr = curscore;
 			}
-			else if (menuopt==1) file.speed &= 3;
+			else if (menuopt==1) file.speed = (file.speed+1)&3;
 			else if (menuopt==2) {
-				gfx_FillScreen(0xFF);
-				for (i=0,y=5;i<CREDITS_LEN;i++,y+=16) centerstr(credits[i],y);
+				drawtitle();
+				for (i=0,y=80;i<CREDITS_LEN;i++,y+=16) centerstr(credits[i],y);
 				gfx_SwapDraw();
 				keywaitrelease();
 			}
@@ -98,22 +117,13 @@ void main(void) {
 			menuopt &= 3;
 			keywait();
 		}
-		gfx_FillScreen(0xFF);
+		drawtitle();
 		gfx_SetTextScale(2,2);
 		for(i=0,y=80;i<4;i++,y+=24) {
 			if (menuopt==i) gfx_SetTextFGColor(MENU_SELECTED_COLOR);
 			centerstr(titlemenu[i],y);
 			gfx_SetTextFGColor(MENU_NORMAL_COLOR);
 		}
-		gfx_SetTextScale(3,3);
-		centerstr("Falldown CE",5);
-		gfx_SetTextScale(1,1);
-		gfx_SetTextXY(5,230);
-		gfx_PrintString("High score (");
-		gfx_PrintString(speedlabels[file.speed]);
-		gfx_PrintString(") : ");
-		gfx_PrintUInt(file.score[file.speed],6);
-		gfx_PrintStringXY(VERSION_INFO,290,230);
 		gfx_SwapDraw();
 	}
 	gfx_End();
@@ -140,7 +150,138 @@ void centerstr(char* s,uint8_t y) {
 	These names have been defined for us in sprites_gfx.h and is of
 	the type gfx_sprite_t.
 */
-void gamemode() {
+int gamemode() {
+	uint8_t speedsteps[] = {2,4,7,12};
+	uint8_t gap,i,j,speed,gapmaxdist,ramping_interval,bally,y,h,color,timer,dir;
+	int score,ballx,x;
+	kb_key_t k;
 	
+	gfx_FillScreen(0xFF);
+	
+	dir = 0;
+	timer = 0;
+	score = 0;
+	speed = speedsteps[file.speed];
+	gap = 20;
+	gapmaxdist = 200;
+	ramping_interval = GAP_COLLAPSE_INTERVAL;
+	ballx = ((320+ball_width)/2);
+	bally = 30;
+	gfx_SetTextScale(1,1);
+	gfx_SetColor(0xFF);
+	
+	while (1) {
+		//Erase current sprite object
+		gfx_FillRectangle_NoClip(2,2,86,8);
+		gfx_FillRectangle_NoClip(ballx,bally,ball_width,ball_height);
+		gfx_ShiftUp(speed);
+		clearRectFast(240-speed);
+		gfx_SetTextXY(2,2);
+		gfx_PrintString("SCORE: ");
+		gfx_PrintUInt(score,5);
+		
+		h = speed<<1;
+		bally -= speed;
+		y = bally+ball_height;
+		for(i=0;(i<h && bally<(240-16-ball_height));i++,bally++,y++) {
+			x = ballx;
+			for(j=ball_width;j>0;j--,x++) {
+				if ((uint8_t)(gfx_GetPixel(x,y)+1)) break;
+			}
+			if (j) break;  //ball has collided. Do not descend further.
+		}
+		
+		kb_Scan();
+		k = kb_Data[1];
+		if (k&kb_Mode) return score;
+		k = kb_Data[7];
+		if (k&kb_Left) {
+			dir = 1;
+			ballx -= 4;
+			if (ballx<0) ballx = 0;
+			//Check if side area is allowable to pass
+		}
+		if (k&kb_Right) {
+			dir = 0;
+			ballx += 4;
+			if (ballx>(319-ball_width)) ballx = (319-ball_width);
+			//Check if side area is allowable to pass
+		}
+		
+		if (bally>240) {
+			gfx_SetColor(0x08);  //xlibc dark blue
+			gfx_SetTextBGColor(0xFF);
+			gfx_FillRectangle(GMBOX_X,GMBOX_Y,GMBOX_W,GMBOX_H);
+			gfx_SetTextFGColor(GREETINGS_DIALOG_TEXT_COLOR);
+			centerstr("Game over",GMBOX_Y+10);
+			gfx_BlitBuffer();
+			keywaitrelease();
+			gfx_SetTextFGColor(0x00);
+			return score;
+		}
+		
+		if (!((timer++)&3)) {
+			if (dir) gfx_RotateSpriteCC(ball,balltemp);
+			else gfx_RotateSpriteC(ball,balltemp);
+			memcpy(ball,balltemp,ball_height*ball_width+2);
+		}
+		gfx_TransparentSprite_NoClip(ball,ballx,bally);
+		
+		gap -= speed;
+		if (gap>240) {
+			drawblocks(gap + 240 - 8);
+			gap = gapmaxdist;
+			ramping_interval--;
+			if (!ramping_interval) {
+				ramping_interval = GAP_COLLAPSE_INTERVAL;
+				gapmaxdist--;
+			}
+		}
+		
+		score++;
+		gfx_BlitBuffer();
+		vsync();
+	}
 }
 
+void drawtitle() {
+	gfx_FillScreen(0xFF);
+	gfx_SetTextScale(3,3);
+	centerstr("Falldown CE",5);
+	gfx_SetTextScale(1,1);
+	gfx_SetTextXY(5,230);
+	gfx_PrintString("High score (");
+	gfx_PrintString(speedlabels[file.speed]);
+	gfx_PrintString(") : ");
+	gfx_PrintUInt(file.score[file.speed],6);
+	gfx_PrintStringXY(VERSION_INFO,290,230);
+}
+
+void drawblocks(uint8_t ypos) {
+	uint8_t blockclear[] = {8,4,3,1};
+	uint24_t blockmask;
+	uint8_t i;
+	int xpos;
+	
+	blockmask = 0;
+	for (i=0;i<GAPS_TO_MAKE;i++) {
+		blockmask |= 1<<randInt(0,19);
+	}
+	for (i=0,xpos=304;i<20;i++,xpos-=16) {
+		if (!(((uint8_t)blockmask)&1)) {
+			gfx_Sprite_NoClip(block,xpos,ypos);
+		}
+		blockmask >>=1;
+	}
+}
+
+/* Use this only if you're going to go the single buffer route */
+void vsync() {
+	asm("ld hl, 0E30000h +  0028h");    //interrupt clear register
+	asm("set 3,(hl)");                  //clear vcomp interrupt (write 1)
+	asm("ld l, 0020h");                 //interrupt raw register
+	asm("_vsync_loop");
+	asm("bit 3,(hl)");                  //Wait until 1 (interrupt triggered)
+	asm("jr z,_vsync_loop");
+	asm("ret");
+}	

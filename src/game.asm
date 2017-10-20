@@ -1,8 +1,5 @@
 ; Game mode routine.
-; Input:  Speed (2=slow 1=medium 0=fast)
-; Output: Score
 
-.ASSUME ADL=1
 
 KG1	EQU 0F50012h
 KG7 EQU 0F5001Eh
@@ -13,26 +10,46 @@ LCD_BASE_ADR EQU 0E30010h
 
 ;----------------------
 SEGMENT BSS
+randData:
+	ds 3
 INTERNAL_DATA:
 	ds 30
 ;----------------------
 SEGMENT CODE
-XDEF _startGame
+.ASSUME ADL=1
+
+XDEF _clearRectFast
+
 XREF _kb_Scan
-_startGame:
+XREF _randInt
+
+
+_clearRectFast:
+	POP DE
+	EX (SP),HL
+	PUSH DE
+	LD A,L
+	CP 240
+	RET NC
+	LD H,160
+	MLT HL
+	ADD HL,HL
+	LD DE,(0E30014h)
+	ADD HL,DE
+	PUSH HL
+	POP DE
+	INC DE
+	LD (HL),0FFh
+	CPL
+	ADD A,240
+	ADD A,A
+	LD C,A
+	LD B,160
+	MLT BC
+	DEC BC
+	LDIR
 	RET
 
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+
 	
 	
