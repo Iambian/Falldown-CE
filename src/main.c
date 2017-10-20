@@ -13,9 +13,8 @@
 #define TRANSPARENT_COLOR 0xF8
 #define GREETINGS_DIALOG_TEXT_COLOR 0xDF
 
-
+#define RAMP_DISTANCE 96
 #define GAPS_TO_MAKE 4
-#define GAP_COLLAPSE_INTERVAL 1
 
 #define GMBOX_X (LCD_WIDTH/4)
 #define GMBOX_Y (LCD_HEIGHT/2-LCD_HEIGHT/16)
@@ -151,9 +150,10 @@ void centerstr(char* s,uint8_t y) {
 	the type gfx_sprite_t.
 */
 int gamemode() {
-	uint8_t speedsteps[] = {2,4,7,12};
-	uint8_t gap,i,j,speed,gapmaxdist,ramping_interval,bally,y,h,color,timer,dir;
-	int score,ballx,x;
+	uint8_t speedsteps[] = {1,2,3,6};
+	uint8_t gap,i,j,speed,gapmaxdist,bally,y,h,w,timer;
+	int8_t dir;
+	int score,ballx,x,gap_ramp_dist;
 	kb_key_t k;
 	
 	gfx_FillScreen(0xFF);
@@ -163,8 +163,8 @@ int gamemode() {
 	score = 0;
 	speed = speedsteps[file.speed];
 	gap = 20;
-	gapmaxdist = 200;
-	ramping_interval = GAP_COLLAPSE_INTERVAL;
+	gapmaxdist = 120;
+	gap_ramp_dist = RAMP_DISTANCE;
 	ballx = ((320+ball_width)/2);
 	bally = 30;
 	gfx_SetTextScale(1,1);
@@ -194,18 +194,21 @@ int gamemode() {
 		kb_Scan();
 		k = kb_Data[1];
 		if (k&kb_Mode) return score;
+		dir = 0;
 		k = kb_Data[7];
-		if (k&kb_Left) {
-			dir = 1;
-			ballx -= 4;
-			if (ballx<0) ballx = 0;
-			//Check if side area is allowable to pass
-		}
-		if (k&kb_Right) {
-			dir = 0;
-			ballx += 4;
-			if (ballx>(319-ball_width)) ballx = (319-ball_width);
-			//Check if side area is allowable to pass
+		if (k&kb_Left) dir = -1;
+		if (k&kb_Right) dir = 1;
+		if (dir) {
+			w = 4;
+			if (dir==1) x = ballx+ball_width;
+			else x = ballx-1;
+			for (i=0;(i<w && x>0 && x<320);i++,x+=dir,ballx+=dir) {
+				y = bally;
+				for (j=ball_height;j>0;j--,y++) {
+					if ((uint8_t)(gfx_GetPixel(x,y)+1)) break;
+				}
+				if (j) break;
+			}
 		}
 		
 		if (bally>240) {
@@ -220,9 +223,10 @@ int gamemode() {
 			return score;
 		}
 		
-		if (!((timer++)&3)) {
-			if (dir) gfx_RotateSpriteCC(ball,balltemp);
-			else gfx_RotateSpriteC(ball,balltemp);
+		if (!((timer++)&1)) {
+			if (dir==(-1)) gfx_RotateSpriteCC(ball,balltemp);
+			else if (dir==(1)) gfx_RotateSpriteC(ball,balltemp);
+			else memcpy(balltemp,ball,ball_height*ball_width+2);
 			memcpy(ball,balltemp,ball_height*ball_width+2);
 		}
 		gfx_TransparentSprite_NoClip(ball,ballx,bally);
@@ -231,12 +235,12 @@ int gamemode() {
 		if (gap>240) {
 			drawblocks(gap + 240 - 8);
 			gap = gapmaxdist;
-			ramping_interval--;
-			if (!ramping_interval) {
-				ramping_interval = GAP_COLLAPSE_INTERVAL;
-				gapmaxdist--;
-			}
 		}
+		if (!(--gap_ramp_dist)) {
+			gap_ramp_dist = RAMP_DISTANCE;
+			gapmaxdist-=2;
+		}
+		
 		
 		score++;
 		gfx_BlitBuffer();

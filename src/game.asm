@@ -41,7 +41,7 @@ _clearRectFast:
 	INC DE
 	LD (HL),0FFh
 	CPL
-	ADD A,240
+	ADD A,241
 	ADD A,A
 	LD C,A
 	LD B,160
