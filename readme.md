@@ -36,7 +36,8 @@ Controls
 
 | Key    | Function in menu
 | ------:|:----------------
-| [2nd]  | Start the game
+| [2nd]  | Select menu option
+| [Up], [Down] | Change menu option
 | [Mode] | Quit the game
 
 
