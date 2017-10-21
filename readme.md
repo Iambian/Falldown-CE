@@ -1,12 +1,8 @@
 Falldown CE
 =================================
-__________________________________________________________________________________________
-***NOTICE***: **THIS GAME DOES NOT BUILD TO SOMETHING USABLE YET.**
-**THIS ONLY EXISTS TO GET THE BALL ROLLING.**
-__________________________________________________________________________________________
 
 Warning:
-* ~~This only works on the TI-84+ CE.~~ This doesn't work on anything yet
+* This only works on the TI-84+ CE.
 * This will not work on the TI-84+ CSE.
 * This will not work on any monochrome calculator.
 
@@ -74,5 +70,7 @@ Version History
 ---------------
 
 * 0.0 - Initial commit.
+* 0.1 - Game mostly works.
+		Known problem: Tearing on bottom corner when played on hardware
    
    

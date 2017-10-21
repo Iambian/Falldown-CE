@@ -150,10 +150,12 @@ void centerstr(char* s,uint8_t y) {
 	the type gfx_sprite_t.
 */
 int gamemode() {
-	uint8_t speedsteps[] = {1,2,3,6};
-	uint8_t gap,i,j,speed,gapmaxdist,bally,y,h,w,timer;
+	uint8_t speedsteps[] = {1,2,3,4};
+	uint8_t gapsteps[] = {4,4,3,2};
+	uint8_t gap,i,j,speed,gapmaxdist,bally,y,h,w,timer,ypos;
 	int8_t dir;
-	int score,ballx,x,gap_ramp_dist;
+	uint24_t blockmask;
+	int score,ballx,x,gap_ramp_dist,xpos;
 	kb_key_t k;
 	
 	gfx_FillScreen(0xFF);
@@ -161,7 +163,6 @@ int gamemode() {
 	dir = 0;
 	timer = 0;
 	score = 0;
-	speed = speedsteps[file.speed];
 	gap = 20;
 	gapmaxdist = 120;
 	gap_ramp_dist = RAMP_DISTANCE;
@@ -171,14 +172,23 @@ int gamemode() {
 	gfx_SetColor(0xFF);
 	
 	while (1) {
+		speed = speedsteps[file.speed];
+		if (bally==(240-16-ball_height)) speed = speed<<1;
+		
 		//Erase current sprite object
 		gfx_FillRectangle_NoClip(2,2,86,8);
 		gfx_FillRectangle_NoClip(ballx,bally,ball_width,ball_height);
 		gfx_ShiftUp(speed);
 		clearRectFast(240-speed);
+		// gfx_SetColor(0xFF);
+		// gfx_HorizLine_NoClip(0,239,320);
+		// if (speed>1) gfx_HorizLine_NoClip(0,238,320);
+		// if (speed>2) gfx_HorizLine_NoClip(0,237,320);
+		// if (speed>3) gfx_HorizLine_NoClip(0,236,320);
+		// if (speed>4) gfx_HorizLine_NoClip(0,235,320);
 		gfx_SetTextXY(2,2);
 		gfx_PrintString("SCORE: ");
-		gfx_PrintUInt(score,5);
+		gfx_PrintUInt(score>>8,5);
 		
 		h = speed<<1;
 		bally -= speed;
@@ -193,7 +203,7 @@ int gamemode() {
 		
 		kb_Scan();
 		k = kb_Data[1];
-		if (k&kb_Mode) return score;
+		if (k&kb_Mode) break;
 		dir = 0;
 		k = kb_Data[7];
 		if (k&kb_Left) dir = -1;
@@ -220,7 +230,7 @@ int gamemode() {
 			gfx_BlitBuffer();
 			keywaitrelease();
 			gfx_SetTextFGColor(0x00);
-			return score;
+			return score>>8;
 		}
 		
 		if (!((timer++)&1)) {
@@ -233,7 +243,19 @@ int gamemode() {
 		
 		gap -= speed;
 		if (gap>240) {
-			drawblocks(gap + 240 - 8);
+			//Start draw blocks
+			ypos = gap + (240 - 8);
+			blockmask = 0;
+			for (i=0;i<gapsteps[file.speed];i++) {
+				blockmask |= 1<<randInt(0,19);
+			}
+			for (i=0,xpos=304;i<20;i++,xpos-=16) {
+				if (!(((uint8_t)blockmask)&1)) {
+					gfx_Sprite_NoClip(block,xpos,ypos);
+				}
+				blockmask >>=1;
+			}
+			//End draw blocks
 			gap = gapmaxdist;
 		}
 		if (!(--gap_ramp_dist)) {
@@ -242,10 +264,13 @@ int gamemode() {
 		}
 		
 		
-		score++;
-		gfx_BlitBuffer();
-		vsync();
+		score+=(((int)(speed))*((int)(bally>>1)));
+		gfx_SwapDraw();
+		gfx_BlitScreen();
+//		vsync();
+//		gfx_BlitBuffer();
 	}
+	return score>>8;
 }
 
 void drawtitle() {
@@ -258,34 +283,17 @@ void drawtitle() {
 	gfx_PrintString(speedlabels[file.speed]);
 	gfx_PrintString(") : ");
 	gfx_PrintUInt(file.score[file.speed],6);
-	gfx_PrintStringXY(VERSION_INFO,290,230);
+	gfx_PrintStringXY(VERSION_INFO,286,230);
 }
 
-void drawblocks(uint8_t ypos) {
-	uint8_t blockclear[] = {8,4,3,1};
-	uint24_t blockmask;
-	uint8_t i;
-	int xpos;
-	
-	blockmask = 0;
-	for (i=0;i<GAPS_TO_MAKE;i++) {
-		blockmask |= 1<<randInt(0,19);
-	}
-	for (i=0,xpos=304;i<20;i++,xpos-=16) {
-		if (!(((uint8_t)blockmask)&1)) {
-			gfx_Sprite_NoClip(block,xpos,ypos);
-		}
-		blockmask >>=1;
-	}
-}
 
 /* Use this only if you're going to go the single buffer route */
-void vsync() {
-	asm("ld hl, 0E30000h +  0028h");    //interrupt clear register
-	asm("set 3,(hl)");                  //clear vcomp interrupt (write 1)
-	asm("ld l, 0020h");                 //interrupt raw register
-	asm("_vsync_loop");
-	asm("bit 3,(hl)");                  //Wait until 1 (interrupt triggered)
-	asm("jr z,_vsync_loop");
-	asm("ret");
-}	
+// void vsync() {
+	// asm("ld hl, 0E30000h +  0028h");    //interrupt clear register
+	// asm("set 3,(hl)");                  //clear vcomp interrupt (write 1)
+	// asm("ld l, 0020h");                 //interrupt raw register
+	// asm("_vsync_loop");
+	// asm("bit 3,(hl)");                  //Wait until 1 (interrupt triggered)
+	// asm("jr z,_vsync_loop");
+	// asm("ret");
+// }	
