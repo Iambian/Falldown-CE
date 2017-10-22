@@ -62,6 +62,8 @@ Troubleshooting
         library version or something like that.
    * A: You need to find the library specified in the error message.
         Follow the link provided to find the needed libraries.
+4. * Q: I think I found a bug. Where can I report it?
+   * A: You can report it here: http://cemete.ch/p264415
 
 License
 -------

@@ -60,7 +60,7 @@ char* filename = "FALLDDAT";
 char *title = "Falldown CE";
 char* titlemenu[] = {"Start Game","Change Speed","About","Quit Game"};
 char* speedlabels[] = {"Slow","Medium","Fast","Hyper"};
-#define CREDITS_LEN 6
+#define CREDITS_LEN 8
 char* credits[] = {
 	"Push LEFT/RIGHT to move the ball",
 	"and make it fall through the gaps.",
@@ -68,6 +68,8 @@ char* credits[] = {
 	"",
 	"Program by Rodger 'Iambian' Weisman",
 	"Released under the MIT License",
+	"File bug reports here:",
+	"http://cemete.ch/p264415",
 };
 
 void main(void) {
@@ -94,14 +96,14 @@ void main(void) {
 		k = kb_Data[1];
 		if (k&kb_2nd) {
 			if (menuopt==0) { 
-				curscore = gamemode();
+				curscore = gamemode()&0x00FFFF;
 				temp_ptr = &file.score[file.speed];
 				if (curscore > *temp_ptr) *temp_ptr = curscore;
 			}
 			else if (menuopt==1) file.speed = (file.speed+1)&3;
 			else if (menuopt==2) {
 				drawtitle();
-				for (i=0,y=80;i<CREDITS_LEN;i++,y+=16) centerstr(credits[i],y);
+				for (i=0,y=70;i<CREDITS_LEN;i++,y+=14) centerstr(credits[i],y);
 				gfx_SwapDraw();
 				keywaitrelease();
 			}
